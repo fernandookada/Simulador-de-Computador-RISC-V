@@ -54,6 +54,17 @@ class CPU:
         imm_b_bits = (bit_12 << 12) | (bit_11 << 11) | (bits_10_5 << 5) | (bits_4_1 << 1)
         imm_b = self.estender_sinal(imm_b_bits, 13)
 
+        # Imediato Tipo-U: bits [31:12] já posicionados nos 20 bits superiores
+        imm_u = instrucao & 0xFFFFF000
+
+        # Imediato Tipo-J: junta imm[20] (bit 31), imm[10:1] (bits 30:21), imm[11] (bit 20), imm[19:12] (bits 19:12)
+        bit_20     = (instrucao >> 31) & 0b1
+        bits_10_1  = (instrucao >> 21) & 0b1111111111
+        bit_11_j   = (instrucao >> 20) & 0b1
+        bits_19_12 = (instrucao >> 12) & 0b11111111
+        imm_j_bits = (bit_20 << 20) | (bits_19_12 << 12) | (bit_11_j << 11) | (bits_10_1 << 1)
+        imm_j = self.estender_sinal(imm_j_bits, 21)
+
         return {
             "opcode": opcode,
             "rd":     rd,
@@ -64,6 +75,8 @@ class CPU:
             "imm_i":  imm_i,
             "imm_s":  imm_s,
             "imm_b":  imm_b,
+            "imm_u":  imm_u,
+            "imm_j":  imm_j,
         }
 
     def executar_ciclo(self, instrucao: int) -> dict:
@@ -180,6 +193,28 @@ class CPU:
 
             if desviar:
                 proximo_pc = self.pc + c["imm_b"]
+
+        # ---------------------------------------------------------------------
+        # 5. Tipo-U: LUI (0110111) e AUIPC (0010111)
+        # ---------------------------------------------------------------------
+        elif opcode == 0b0110111:  # LUI: rd = imm << 12
+            self.definir_registrador(rd, c["imm_u"])
+
+        elif opcode == 0b0010111:  # AUIPC: rd = PC + (imm << 12)
+            self.definir_registrador(rd, self.pc + c["imm_u"])
+
+        # ---------------------------------------------------------------------
+        # 6. Saltos incondicionais: JAL (Tipo-J: 1101111) e JALR (Tipo-I: 1100111)
+        # ---------------------------------------------------------------------
+        elif opcode == 0b1101111:  # JAL: rd = PC + 4; PC = PC + imm_j
+            self.definir_registrador(rd, self.pc + 4)
+            proximo_pc = self.pc + c["imm_j"]
+
+        elif opcode == 0b1100111 and funct3 == 0b000:  # JALR: rd = PC + 4; PC = (rs1 + imm_i) & ~1
+            # O destino é calculado antes de escrever rd (caso rd == rs1)
+            destino = (s_rs1 + c["imm_i"]) & ~1
+            self.definir_registrador(rd, self.pc + 4)
+            proximo_pc = destino
 
         self.pc = proximo_pc & 0xFFFFFFFF
         return c
