@@ -1,10 +1,19 @@
+from memoria import Memoria
+from barramento import Barramento
+
+
 class CPU:
-    def __init__(self):
+    def __init__(self, barramento: Barramento | None = None):
         # Banco de 32 registradores (x0 até x31) e Program Counter (PC)
         self.registradores = [0] * 32
         self.pc = 0
-        # Estrutura simples de memória (endereço -> valor) para testar LW e SW
-        self.memoria = {}
+        # Toda comunicação com a memória passa pelo barramento. Se nenhum for
+        # informado, a CPU cria uma memória e um barramento próprios.
+        if barramento is None:
+            barramento = Barramento(Memoria())
+        self.barramento = barramento
+        # Endereços gravados por SW (usado apenas no resumo)
+        self.enderecos_escritos = set()
 
     def definir_registrador(self, reg: int, valor: int):
         """Salva um valor de 32 bits no registrador, mantendo x0 sempre em 0."""
@@ -78,6 +87,16 @@ class CPU:
             "imm_u":  imm_u,
             "imm_j":  imm_j,
         }
+
+    def buscar(self) -> int:
+        """Fase de busca: lê pelo barramento a instrução no endereço apontado pelo PC."""
+        return self.barramento.ler(self.pc)
+
+    def passo(self) -> int:
+        """Ciclo completo: busca a instrução na memória, decodifica e executa."""
+        instrucao = self.buscar()
+        self.executar_ciclo(instrucao)
+        return instrucao
 
     def executar_ciclo(self, instrucao: int) -> dict:
         """Decodifica a instrução, executa na ULA/Memória e atualiza o PC."""
@@ -165,13 +184,14 @@ class CPU:
         elif opcode == 0b0000011:
             if funct3 == 0b010:  # LW (Load Word): rd = MEM[rs1 + imm_i]
                 endereco = (s_rs1 + c["imm_i"]) & 0xFFFFFFFF
-                valor_lido = self.memoria.get(endereco, 0)
+                valor_lido = self.barramento.ler(endereco)
                 self.definir_registrador(rd, valor_lido)
 
         elif opcode == 0b0100011:
             if funct3 == 0b010:  # SW (Store Word): MEM[rs1 + imm_s] = rs2
                 endereco = (s_rs1 + c["imm_s"]) & 0xFFFFFFFF
-                self.memoria[endereco] = u_rs2
+                self.barramento.escrever(endereco, u_rs2)
+                self.enderecos_escritos.add(endereco)
 
         # ---------------------------------------------------------------------
         # 4. Desvio Condicional (Branch - Tipo-B) -> opcode = 1100011
@@ -210,11 +230,21 @@ class CPU:
             self.definir_registrador(rd, self.pc + 4)
             proximo_pc = self.pc + c["imm_j"]
 
-        elif opcode == 0b1100111 and funct3 == 0b000:  # JALR: rd = PC + 4; PC = (rs1 + imm_i) & ~1
-            # O destino é calculado antes de escrever rd (caso rd == rs1)
-            destino = (s_rs1 + c["imm_i"]) & ~1
-            self.definir_registrador(rd, self.pc + 4)
-            proximo_pc = destino
+        elif opcode == 0b1100111:
+            if funct3 == 0b000:  # JALR: rd = PC + 4; PC = (rs1 + imm_i) & ~1
+                # O destino é calculado antes de escrever rd (caso rd == rs1)
+                destino = (s_rs1 + c["imm_i"]) & ~1
+                self.definir_registrador(rd, self.pc + 4)
+                proximo_pc = destino
+
+        # ---------------------------------------------------------------------
+        # Opcode não reconhecido
+        # ---------------------------------------------------------------------
+        else:
+            raise ValueError(
+                f"Opcode desconhecido 0b{opcode:07b} na instrução 0x{instrucao:08X} "
+                f"(PC = 0x{self.pc:08X})"
+            )
 
         self.pc = proximo_pc & 0xFFFFFFFF
         return c
@@ -228,7 +258,8 @@ class CPU:
                 val_sinal = self.para_com_sinal(self.registradores[i])
                 print(f"x{i} = {val_sinal} (hex: 0x{self.registradores[i]:08X})")
 
-        if self.memoria:
+        if self.enderecos_escritos:
             print("\n--- Posições de Memória Utilizadas ---")
-            for end, val in self.memoria.items():
+            for end in sorted(self.enderecos_escritos):
+                val = self.barramento.memoria.ler_palavra(end)
                 print(f"MEM[0x{end:05X}] = {self.para_com_sinal(val)} (hex: 0x{val:08X})")

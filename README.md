@@ -61,3 +61,25 @@ Se o cronograma principal for finalizado com folga, o grupo focará em:
 1. **Memória Cache:** Criar uma classe Cache de 256 linhas entre o Barramento e a CPU.  
 2. **Interface Gráfica:** Substituir o print no terminal por uma janela iterativa usando `Tkinter` ou `Pygame`.  
 3. **Interrupção Externa:** Adicionar "listener" para interrupções disparadas pelo teclado.
+
+---
+
+## 4\. Como executar
+
+Requer apenas Python 3.10+ (sem dependências externas). A partir da raiz do repositório:
+
+```bash
+python main.py                              # roda o programa de demonstração
+python -m unittest discover -s tests -v     # roda todos os testes
+```
+
+### Estrutura de arquivos
+
+```
+cpu.py          # CPU: registradores, PC, decodificação e execução (RV32I + CTZ)
+memoria.py      # Memória: mapa de endereços (RAM, VRAM, reservada, periféricos)
+barramento.py   # Barramento: dados, endereços e controle entre CPU e Memória
+simulador.py    # Simulador: monta o computador e roda o ciclo busca/decodifica/executa
+main.py         # Demonstração
+tests/          # Testes automáticos (unittest)
+```
