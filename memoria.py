@@ -93,6 +93,23 @@ class Memoria:
         """Retorna o conteúdo bruto da VRAM (usado pela saída no terminal na semana 6)."""
         return bytes(self.dados[self.INICIO_VRAM:self.FIM_VRAM + 1])
 
+    def ler_vram_ascii(self) -> str:
+        """
+        Converte os bytes não nulos presentes na VRAM em uma string ASCII.
+        Funciona tanto para caracteres gravados 1 por palavra via SW (0x80000, 0x80004...)
+        quanto para caracteres empacotados em bytes consecutivos.
+        """
+        caracteres = []
+        vram = self.dados[self.INICIO_VRAM:self.FIM_VRAM + 1]
+        for b in vram:
+            if b == 0:
+                continue
+            if 32 <= b <= 126 or b in (9, 10, 13):
+                caracteres.append(chr(b))
+            else:
+                caracteres.append("?")
+        return "".join(caracteres)
+
     def dump(self, inicio: int, quantidade_palavras: int = 8):
         """Mostra um trecho da memória, uma palavra por linha."""
         for i in range(quantidade_palavras):

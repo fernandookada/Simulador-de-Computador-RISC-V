@@ -106,6 +106,20 @@ class TestIntegracao(unittest.TestCase):
         ]
         self.rodar(programa)
         self.assertEqual(self.sim.memoria.ler_vram()[0], ord("H"))
+        self.assertEqual(self.sim.memoria.ler_vram_ascii(), "H")
+
+    def test_es_programada_vram_a_cada_n_instrucoes(self):
+        programa = [
+            lui(1, 0x80),          # 1. x1 = 0x80000 (VRAM)
+            m.addi(2, 0, ord("O")),# 2. x2 = 'O'
+            sw(2, 1, 0),           # 3. VRAM[0x80000] = 'O'  -> 1ª transmissão (ciclo 3): "O"
+            m.addi(2, 0, ord("I")),# 4. x2 = 'I'
+            sw(2, 1, 4),           # 5. VRAM[0x80004] = 'I'
+            m.addi(3, 0, 1),       # 6. x3 = 1               -> 2ª transmissão (ciclo 6): "OI"
+        ]
+        executadas = self.rodar(programa, intervalo_vram=3, imprimir_vram=False)
+        self.assertEqual(executadas, 6)
+        self.assertEqual(self.sim.transmissoes_vram, [(3, "O"), (6, "OI")])
 
     # --- Chamada de função ----------------------------------------------------
     def test_jal_jalr_chamada_de_funcao(self):
